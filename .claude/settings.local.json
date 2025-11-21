@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__browsermcp-enhanced__browser_navigate",
+      "mcp__browsermcp-enhanced__browser_get_console_logs",
+      "mcp__browsermcp-enhanced__browser_execute_js",
+      "mcp__browsermcp-enhanced__browser_snapshot",
+      "mcp__browsermcp-enhanced__browser_screenshot",
+      "mcp__browsermcp-enhanced__browser_extract_html"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
