@@ -6,6 +6,7 @@ import {
   Box,
   Burger,
   Button,
+  Drawer,
   Divider,
   Group,
   NavLink,
@@ -207,6 +208,7 @@ function App() {
   const { colorScheme, setColorScheme } = useMantineColorScheme()
   const [navbarOpened, { toggle: toggleNavbar, close: closeNavbar }] = useDisclosure(true)
   const [asideOpened, { toggle: toggleAside }] = useDisclosure(true)
+  const [queueOpened, { toggle: toggleQueue, close: closeQueue }] = useDisclosure(false)
   const [activeSection, setActiveSection] = useState('now-playing')
   const [intensity, setIntensity] = useState(70)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -754,9 +756,6 @@ function App() {
             </Box>
           </Group>
           <Group>
-            <Badge size="lg" variant="light">
-              {activeSection.replace('-', ' ')}
-            </Badge>
             <Tooltip label="Go to Visualizer">
               <ActionIcon
                 variant={activeSection === 'now-playing' ? 'filled' : 'light'}
@@ -939,7 +938,11 @@ function App() {
         <Stack h="100%" justify="center" gap="xs" px="lg" py="sm">
           <Group justify="space-between" align="center">
             <Group>
-              <Button leftSection={<IconList size={18} />} variant="subtle">
+              <Button
+                leftSection={<IconList size={18} />}
+                variant={queueOpened ? 'filled' : 'subtle'}
+                onClick={toggleQueue}
+              >
                 Queue ({playlist.length})
               </Button>
               <Divider orientation="vertical" />
@@ -1075,6 +1078,25 @@ function App() {
           )}
         </Box>
       </AppShell.Main>
+      <Drawer
+        opened={queueOpened}
+        onClose={closeQueue}
+        position="right"
+        title="Queue"
+        padding="md"
+        size="md"
+        overlayProps={{ backgroundOpacity: 0.5, blur: 4 }}
+      >
+        <Playlist
+          playlist={playlist}
+          currentTrackIndex={currentTrackIndex}
+          onPlayTrack={handlePlayTrackFromPlaylist}
+          onRemoveTrack={handleRemoveTrack}
+          onReorderPlaylist={handleReorderPlaylist}
+          onAddTracks={handleAddTracks}
+          onToggleFavorite={handleToggleFavorite}
+        />
+      </Drawer>
       <audio ref={audioRef} hidden preload="auto" />
     </AppShell>
   )
