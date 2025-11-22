@@ -39,6 +39,8 @@ import {
   IconBolt,
   IconMoon,
   IconArrowsMaximize,
+  IconRepeat,
+  IconArrowsShuffle,
 } from '@tabler/icons-react'
 import { useDisclosure } from '@mantine/hooks'
 import AudioVisualizer from './components/AudioVisualizer.jsx'
@@ -74,9 +76,9 @@ const tonePresets = ['Aurora', 'Neon Grid', 'Deep Sea', 'Sunrise']
 const mixPresets = [
   {
     id: 'chillwave',
-    title: 'Chillwave',
+    title: 'Violet Spectrum',
     icon: IconSunset,
-    description: 'Soft synths and wide pads',
+    description: 'Rounded purple and pink bars',
     colors: ['#a855f7', '#ec4899', '#22d3ee'],
     background: { inner: '#111633', outer: '#020617' },
     haloColor: 'rgba(168, 85, 247, 0.28)',
@@ -110,12 +112,17 @@ const mixPresets = [
       bottom: '#05030a',
     },
     starDensity: 65,
+    barSpacing: 2,
+    barSegments: 0,
+    mirror: true,
+    shape: 'rounded',
+    smoothingTimeConstant: 0.9,
   },
   {
     id: 'pulse-drive',
-    title: 'Pulse Drive',
+    title: 'Amber Spectrum',
     icon: IconBolt,
-    description: 'High energy bass stabs',
+    description: 'High contrast orange and red bars',
     colors: ['#f97316', '#fb7185', '#fcd34d'],
     background: { inner: '#1c0f0a', outer: '#030712' },
     haloColor: 'rgba(249, 115, 22, 0.28)',
@@ -149,12 +156,17 @@ const mixPresets = [
       bottom: '#030102',
     },
     starDensity: 90,
+    barSpacing: 4,
+    barSegments: 0,
+    mirror: true,
+    shape: 'sharp',
+    smoothingTimeConstant: 0.65,
   },
   {
     id: 'lunar-echoes',
-    title: 'Lunar Echoes',
+    title: 'Azure Spectrum',
     icon: IconMoon,
-    description: 'Sparse ambience and delay',
+    description: 'Segmented blue and cyan bars',
     colors: ['#38bdf8', '#22d3ee', '#a5f3fc'],
     background: { inner: '#03181f', outer: '#010a17' },
     haloColor: 'rgba(56, 189, 248, 0.26)',
@@ -188,6 +200,11 @@ const mixPresets = [
       bottom: '#000307',
     },
     starDensity: 50,
+    barSpacing: 8,
+    barSegments: 8,
+    mirror: false,
+    shape: 'sharp',
+    smoothingTimeConstant: 0.85,
   },
 ]
 
@@ -220,6 +237,9 @@ function App() {
   const [volume, setVolume] = useState(0.8)
   const [track, setTrack] = useState(null)
   const [mixPresetId, setMixPresetId] = useState(mixPresets[0].id)
+  const [isLooping, setIsLooping] = useState(false)
+  const [isShuffling, setIsShuffling] = useState(false)
+  const [shuffledIndices, setShuffledIndices] = useState([])
 
   const audioRef = useRef(null)
   const playlistRef = useRef([])
@@ -237,6 +257,26 @@ function App() {
     }
     setTrack(playlist[currentTrackIndex])
   }, [currentTrackIndex, playlist])
+
+  // Shuffle logic
+  useEffect(() => {
+    if (isShuffling) {
+      const indices = Array.from({ length: playlist.length }, (_, i) => i)
+      for (let i = indices.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1))
+          ;[indices[i], indices[j]] = [indices[j], indices[i]]
+      }
+      // Ensure current track is first if playing
+      if (currentTrackIndex !== -1) {
+        const currentInShuffled = indices.indexOf(currentTrackIndex)
+        if (currentInShuffled !== -1) {
+          indices.splice(currentInShuffled, 1)
+          indices.unshift(currentTrackIndex)
+        }
+      }
+      setShuffledIndices(indices)
+    }
+  }, [isShuffling, playlist.length]) // Re-shuffle when enabled or playlist size changes
 
   const toggleColorScheme = () => {
     setColorScheme(colorScheme === 'dark' ? 'light' : 'dark')
@@ -360,25 +400,57 @@ function App() {
 
   const handleNextTrack = useCallback((options = {}) => {
     const shouldAutoPlay = options.autoPlay ?? isPlaying
-    const nextIndex = currentTrackIndex + 1
-    if (nextIndex < playlist.length) {
+    let nextIndex = -1
+
+    if (isShuffling && shuffledIndices.length > 0) {
+      const currentShuffledIndex = shuffledIndices.indexOf(currentTrackIndex)
+      if (currentShuffledIndex !== -1 && currentShuffledIndex < shuffledIndices.length - 1) {
+        nextIndex = shuffledIndices[currentShuffledIndex + 1]
+      } else if (isLooping) {
+        nextIndex = shuffledIndices[0]
+      }
+    } else {
+      if (currentTrackIndex < playlist.length - 1) {
+        nextIndex = currentTrackIndex + 1
+      } else if (isLooping && playlist.length > 0) {
+        nextIndex = 0
+      }
+    }
+
+    if (nextIndex !== -1) {
       handlePlayTrackByIndex(nextIndex)
       if (shouldAutoPlay) {
         attemptAutoPlay()
       }
     }
-  }, [attemptAutoPlay, currentTrackIndex, playlist.length, handlePlayTrackByIndex, isPlaying])
+  }, [attemptAutoPlay, currentTrackIndex, playlist.length, handlePlayTrackByIndex, isPlaying, isLooping, isShuffling, shuffledIndices])
 
   const handlePrevTrack = useCallback((options = {}) => {
     const shouldAutoPlay = options.autoPlay ?? isPlaying
-    const prevIndex = currentTrackIndex - 1
-    if (prevIndex >= 0) {
+    let prevIndex = -1
+
+    if (isShuffling && shuffledIndices.length > 0) {
+      const currentShuffledIndex = shuffledIndices.indexOf(currentTrackIndex)
+      if (currentShuffledIndex > 0) {
+        prevIndex = shuffledIndices[currentShuffledIndex - 1]
+      } else if (isLooping) {
+        prevIndex = shuffledIndices[shuffledIndices.length - 1]
+      }
+    } else {
+      if (currentTrackIndex > 0) {
+        prevIndex = currentTrackIndex - 1
+      } else if (isLooping && playlist.length > 0) {
+        prevIndex = playlist.length - 1
+      }
+    }
+
+    if (prevIndex !== -1) {
       handlePlayTrackByIndex(prevIndex)
       if (shouldAutoPlay) {
         attemptAutoPlay()
       }
     }
-  }, [attemptAutoPlay, currentTrackIndex, handlePlayTrackByIndex, isPlaying])
+  }, [attemptAutoPlay, currentTrackIndex, handlePlayTrackByIndex, isPlaying, isLooping, isShuffling, shuffledIndices, playlist.length])
 
   const handleRemoveTrack = useCallback((indexToRemove) => {
     setPlaylist((prev) => {
@@ -590,8 +662,8 @@ function App() {
     [mixPresetId],
   )
 
-  const hasPrevTrack = currentTrackIndex > 0
-  const hasNextTrack = currentTrackIndex < playlist.length - 1
+  const hasPrevTrack = isLooping ? playlist.length > 0 : (isShuffling ? shuffledIndices.indexOf(currentTrackIndex) > 0 : currentTrackIndex > 0)
+  const hasNextTrack = isLooping ? playlist.length > 0 : (isShuffling ? shuffledIndices.indexOf(currentTrackIndex) < shuffledIndices.length - 1 : currentTrackIndex < playlist.length - 1)
 
   const handleCreateCollection = useCallback(async (name) => {
     if (!storageEnabled) return
@@ -774,6 +846,26 @@ function App() {
                 disabled={activeSection !== 'now-playing'}
               >
                 <IconArrowsMaximize size={18} />
+              </ActionIcon>
+            </Tooltip>
+            <Tooltip label={isLooping ? "Disable Loop" : "Enable Loop"}>
+              <ActionIcon
+                variant={isLooping ? "filled" : "light"}
+                color={isLooping ? "violet" : "gray"}
+                size="lg"
+                onClick={() => setIsLooping(!isLooping)}
+              >
+                <IconRepeat size={18} />
+              </ActionIcon>
+            </Tooltip>
+            <Tooltip label={isShuffling ? "Disable Shuffle" : "Enable Shuffle"}>
+              <ActionIcon
+                variant={isShuffling ? "filled" : "light"}
+                color={isShuffling ? "violet" : "gray"}
+                size="lg"
+                onClick={() => setIsShuffling(!isShuffling)}
+              >
+                <IconArrowsShuffle size={18} />
               </ActionIcon>
             </Tooltip>
             <ActionIcon variant="light" size="lg" onClick={toggleColorScheme}>

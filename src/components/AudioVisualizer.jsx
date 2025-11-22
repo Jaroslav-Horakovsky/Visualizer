@@ -124,9 +124,10 @@ const AudioVisualizer = forwardRef(({ audioRef, track, intensity, isPlaying, onS
       floorColor: 'rgba(3, 4, 12, 0.94)',
       barCount: 64, // Increased for smoother look
       barSegments: 0, // 0 means continuous bar
-      barSpacing: 4,
-      reflectionStrength: 0.5,
-      equalizerContrast: 0.85,
+      barSpacing: 2,
+      mirror: true,
+      shape: 'rounded', // rounded, sharp, cylindrical
+      smoothingTimeConstant: 0.85,
       starDensity: 0,
     }
     if (!visualStyle) return baseStyle
@@ -160,7 +161,7 @@ const AudioVisualizer = forwardRef(({ audioRef, track, intensity, isPlaying, onS
       const audioContext = new AudioContextClass()
       const analyser = audioContext.createAnalyser()
       analyser.fftSize = 4096 // Higher resolution
-      analyser.smoothingTimeConstant = 0.85
+      analyser.smoothingTimeConstant = visualStyle?.smoothingTimeConstant || 0.85
 
       try {
         const source = audioContext.createMediaElementSource(audioEl)
@@ -177,6 +178,10 @@ const AudioVisualizer = forwardRef(({ audioRef, track, intensity, isPlaying, onS
     audioContextRef.current = graph.audioContext
     analyserRef.current = graph.analyser
     sourceRef.current = graph.source
+
+    if (analyserRef.current) {
+      analyserRef.current.smoothingTimeConstant = resolvedStyle.smoothingTimeConstant || 0.85
+    }
 
     if (!dataArrayRef.current || dataArrayRef.current.length !== analyserRef.current.frequencyBinCount) {
       dataArrayRef.current = new Uint8Array(analyserRef.current.frequencyBinCount)
@@ -392,29 +397,102 @@ const AudioVisualizer = forwardRef(({ audioRef, track, intensity, isPlaying, onS
         ctx.shadowColor = color
 
         const h = bar * maxBarHeight * (0.5 + intensityFactor)
+        const spacing = style.barSpacing ?? 2
+        const totalBarWidth = barWidth + spacing
 
-        // Draw mirrored bars from center
-        // Left side
-        const x1 = centerX - (i * (barWidth + 2)) - barWidth
-        const y1 = centerY - h / 2
+        // Draw bars
+        const drawBar = (x, y, width, height) => {
+          if (style.barSegments > 0) {
+            const segmentHeight = height / style.barSegments
+            const gap = 1
+            for (let s = 0; s < style.barSegments; s++) {
+              const sy = y + s * segmentHeight
+              const sh = segmentHeight - gap
+              if (sh > 0) {
+                ctx.fillRect(x, sy, width, sh)
+              }
+            }
+          } else {
+            if (style.shape === 'sharp') {
+              ctx.fillRect(x, y, width, height)
+            } else if (style.shape === 'cylindrical') {
+              const gradient = ctx.createLinearGradient(x, y, x + width, y)
+              gradient.addColorStop(0, color)
+              gradient.addColorStop(0.5, '#ffffff')
+              gradient.addColorStop(1, color)
+              ctx.fillStyle = gradient
+              ctx.fillRect(x, y, width, height)
+              ctx.fillStyle = color // Reset
+            } else {
+              // Rounded default
+              ctx.beginPath()
+              if (ctx.roundRect) {
+                ctx.roundRect(x, y, width, height, 4)
+              } else {
+                ctx.rect(x, y, width, height)
+              }
+              ctx.fill()
+            }
+          }
+        }
 
-        // Right side
-        const x2 = centerX + (i * (barWidth + 2))
-        const y2 = centerY - h / 2
+        if (style.mirror) {
+          // Left side
+          const x1 = centerX - (i * totalBarWidth) - barWidth
+          const y1 = centerY - h / 2
+          drawBar(x1, y1, barWidth, h)
 
-        // Rounded caps
-        ctx.beginPath()
-        ctx.roundRect(x1, y1, barWidth, h, 4)
-        ctx.roundRect(x2, y2, barWidth, h, 4)
-        ctx.fill()
+          // Right side
+          const x2 = centerX + (i * totalBarWidth)
+          const y2 = centerY - h / 2
+          drawBar(x2, y2, barWidth, h)
 
-        // Reflection
-        ctx.globalAlpha = 0.2
-        ctx.beginPath()
-        ctx.roundRect(x1, y1 + h + 4, barWidth, h * 0.5, 4)
-        ctx.roundRect(x2, y2 + h + 4, barWidth, h * 0.5, 4)
-        ctx.fill()
-        ctx.globalAlpha = 1.0
+          // Reflection
+          if (style.reflectionStrength > 0) {
+            ctx.globalAlpha = 0.2 * style.reflectionStrength
+            if (style.shape === 'sharp') {
+              ctx.fillRect(x1, y1 + h + 4, barWidth, h * 0.5)
+              ctx.fillRect(x2, y2 + h + 4, barWidth, h * 0.5)
+            } else {
+              ctx.beginPath()
+              if (ctx.roundRect) {
+                ctx.roundRect(x1, y1 + h + 4, barWidth, h * 0.5, 4)
+                ctx.roundRect(x2, y2 + h + 4, barWidth, h * 0.5, 4)
+              } else {
+                ctx.rect(x1, y1 + h + 4, barWidth, h * 0.5)
+                ctx.rect(x2, y2 + h + 4, barWidth, h * 0.5)
+              }
+              ctx.fill()
+            }
+            ctx.globalAlpha = 1.0
+          }
+        } else {
+          // No mirror - draw from left to right or centered single
+          // Let's do centered single row for non-mirrored for now, or full width
+          // Actually, for "Lunar Echoes" maybe just centered bars without mirroring looks good?
+          // Or just one sequence from left to right.
+          // Let's stick to centered but single sequence if not mirrored?
+          // Or maybe spread them out?
+          // For now, let's implement centered single sequence
+          const totalWidth = bars.length * totalBarWidth
+          const startX = centerX - totalWidth / 2
+          const x = startX + i * totalBarWidth
+          const y = centerY - h / 2
+          drawBar(x, y, barWidth, h)
+
+          // Reflection
+          if (style.reflectionStrength > 0) {
+            ctx.globalAlpha = 0.2 * style.reflectionStrength
+            if (style.shape === 'sharp') {
+              ctx.fillRect(x, y + h + 4, barWidth, h * 0.5)
+            } else {
+              ctx.beginPath()
+              ctx.roundRect(x, y + h + 4, barWidth, h * 0.5, 4)
+              ctx.fill()
+            }
+            ctx.globalAlpha = 1.0
+          }
+        }
       })
 
       ctx.shadowBlur = 0
